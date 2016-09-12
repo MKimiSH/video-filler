@@ -1,0 +1,3 @@
+lr=0.0002 original, batch=64, a batch costs ~1.455s, (18000 images) 100 epochs costs ~10h
+
+lr=0.0008 slow convergence, cut by some other people..
