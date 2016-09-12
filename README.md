@@ -1,3 +1,7 @@
+This repo is forked (downloaded actually) from D. Pathak's [repo](https://github.com/pathak22/context-encoder) aiming at adapting it to video inpainting task.
+
+The following is the original README.md, and the video inpainting method is under development. Unfortunately I can't promise that the original README still works....
+
 ## Context Encoders: Feature Learning by Inpainting
 [Project Website](http://cs.berkeley.edu/~pathak/context_encoder/)
 
