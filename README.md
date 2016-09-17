@@ -2,6 +2,10 @@ This repo is forked (downloaded actually) from D. Pathak's [repo](https://github
 
 The following is the original README.md, and the video inpainting method is under development. Unfortunately I can't promise that the original README still works....
 
+Planned: 2D-CNN for pretraining and 3D-CNN for real inpainting network. 2D-CNN to catch the main spatial structure (and thus the resolution is lower) and 3D-CNN to catch the temporal and more delicate structure of the input (and thus the spatial resolution is higher).
+2D-CNN receives 128x128 input and output 64x64 patch which is the center of the input.
+3D-CNN receives 20x128x128 input and output 20x128x128 patch. The patches with context (20x256x256 resized to 20x128x128) go through 2D-CNN first and 
+
 ## Context Encoders: Feature Learning by Inpainting
 [Project Website](http://cs.berkeley.edu/~pathak/context_encoder/)
 
