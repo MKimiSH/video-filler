@@ -4,10 +4,13 @@ The following is the original README.md, and the video inpainting method is unde
 
 Planned: 2D-CNN for pretraining and 3D-CNN for real inpainting network. 2D-CNN to catch the main spatial structure (and thus the resolution is lower) and 3D-CNN to catch the temporal and more delicate structure of the input (and thus the spatial resolution is higher).
 2D-CNN receives 128x128 input and output 64x64 patch which is the center of the input.
-3D-CNN receives 20x128x128 input and output 20x128x128 patch. The patches with context (20x256x256 resized to 20x128x128) go through 2D-CNN first and 
+3D-CNN receives 20x128x128 input and output 20x128x128 patch. The patches with context (20x256x256 resized to 20x128x128) go through 2D-CNN first and then the result is fed into 3D-CNN.
+3D-CNN should use some techniques like factorizing 3D-convolutions to speed up the training process.
+
+Also, the input of both CNNs are 4-channel, 3-channel image + 1-channel mask (rescaled to fit in [-1,1])
 
 ## Context Encoders: Feature Learning by Inpainting
-[Project Website](http://cs.berkeley.edu/~pathak/context_encoder/)
+[Project Website](http://cs.berkeley.edu/~pathak/context_encoder/ )
 
 This is the training code for our CVPR 2016 paper on Context Encoders for learning deep feature representation in an unsupervised manner by image inpainting. This code is adapted from an initial fork of [Soumith's DCGAN](https://github.com/soumith/dcgan.torch) implementation. Scroll down to try out a quick demo or train your own inpainting models!
 
