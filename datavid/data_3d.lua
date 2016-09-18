@@ -23,7 +23,7 @@ function data.new(n, opt_)
       self[k] = v
    end
 
-   local donkey_file = opt_.donkey_file or 'donkey_folder.lua'
+   local donkey_file = opt_.donkey_file or 'donkey_folder_3d.lua'
    if n > 0 then
       local options = opt_
       self.threads = Threads(n,

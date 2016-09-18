@@ -1,7 +1,7 @@
 --[[ modified by MKimiSH, modified part marked with --M
   network uses 3D-convolution(strided in time dimension):
   4x23x128x128 input -> 3x23x128x128 output
-  4x23x128x128, 32x23x64x64, 64x23x32x32, 192x11x16x16, 384x5x8x8
+  4x23x128x128, 32x23x64x64, 64x23x32x32, 192x11x16x16, 512x5x8x8
   and reverse to form netG
   netD: 384x5x8x8 -> fc 10000-> 1
 ]]
@@ -14,14 +14,14 @@ util = paths.dofile('util.lua')
 inpainter = paths.dofile('inpaint_utils.lua')
 
 opt = {
-   batchSize = 16 ,         -- number of video samples to produce, 2 IS FOR TESTING!!
+   batchSize = 32,         -- number of video samples to produce
    loadSize = 360,         -- resize the loaded image to loadsize maintaining aspect ratio. 0 means don't resize. -1 means scale randomly between [0.5,2] -- see donkey_folder.lua
    --M: loadSize should not be -1 because there are two images to read simultaneously!!
    fineSize = 128,         -- size of random crops
-   nBottleneck = 4000,      -- #  of dim for bottleneck of encoder
-   nef = 64,               -- #  of encoder filters in first conv layer
-   ngf = 64,               -- #  of gen filters in first conv layer
-   ndf = 64,               -- #  of discrim filters in first conv layer
+   nBottleneck = 8192,      -- #  of dim for bottleneck of encoder
+   nef = 32,               -- #  of encoder filters in first conv layer
+   ngf = 32,               -- #  of gen filters in first conv layer
+   ndf = 32,               -- #  of discrim filters in first conv layer
    ncin = 4,                 -- # of channels in input
    ncout = 3,               -- # of channels in output
    predLen = 23,            --M # of frames in a clip
@@ -74,7 +74,7 @@ torch.setnumthreads(1)
 torch.setdefaulttensortype('torch.FloatTensor')
 
 -- create data loader
-local DataLoader = paths.dofile('datavid/data.lua')
+local DataLoader = paths.dofile('datavid/data_3d.lua')
 local data = DataLoader.new(opt.nThreads, opt)
 print("Dataset Size: ", data:size())
 
@@ -89,6 +89,9 @@ local function weights_init(m)
    elseif name:find('BatchNormalization') then
       if m.weight then m.weight:normal(1.0, 0.02) end
       if m.bias then m.bias:fill(0) end
+   elseif name:find('Linear') then
+      m.weight:normal(0.0, 0.02)
+      m.bias:fill(0)
    end
 end
 -- because only nil and false are FALSE, so "if *var*" can be used gracefully
@@ -107,33 +110,41 @@ local SpatialBatchNormalization = nn.SpatialBatchNormalization
 local SpatialConvolution = nn.SpatialConvolution
 local SpatialFullConvolution = nn.SpatialFullConvolution
 
+local volconv = nn.VolumetricConvolution
+local volbnorm = nn.VolumetricBatchNormalization
+local volfconv = nn.VolumetricFullConvolution
+
+--volconv(ncin, ncout, kt, kw, kh, dt, dw, dh, padt, padw, padh)
+--volbnorm(N)
+--volfconv(ncin, ncout, kt, kw, kh, dt, dw, dh, padt, padw, padh)
+
 ---------------------------------------------------------------------------
 -- Generator net
 ---------------------------------------------------------------------------
 -- Encode Input Context to noise (architecture similar to Discriminator)
 local netE = nn.Sequential()
--- input is (nc) x 128 x 128
-netE:add(SpatialConvolution(ncin, nef, 4, 4, 2, 2, 1, 1))
+-- input: nc x 23x128x128
+netE:add(volconv(ncin, nef, 1,4,4,  1,2,2,  0,1,1))
 netE:add(nn.LeakyReLU(0.2, true))
--- state size: (nef) x 64 x 64
-netE:add(SpatialConvolution(nef, nef, 4, 4, 2, 2, 1, 1))
-netE:add(SpatialBatchNormalization(nef)):add(nn.LeakyReLU(0.2, true))
--- state size: (nef) x 32 x 32
-netE:add(SpatialConvolution(nef, nef * 2, 4, 4, 2, 2, 1, 1))
-netE:add(SpatialBatchNormalization(nef * 2)):add(nn.LeakyReLU(0.2, true))
--- state size: (nef*2) x 16 x 16
-netE:add(SpatialConvolution(nef * 2, nef * 4, 4, 4, 2, 2, 1, 1))
-netE:add(SpatialBatchNormalization(nef * 4)):add(nn.LeakyReLU(0.2, true))
--- state size: (nef*4) x 8 x 8
-netE:add(SpatialConvolution(nef * 4, nef * 8, 4, 4, 2, 2, 1, 1))
-netE:add(SpatialBatchNormalization(nef * 8)):add(nn.LeakyReLU(0.2, true))
--- state size: (nef*8) x 4 x 4
-netE:add(SpatialConvolution(nef * 8, nBottleneck, 4, 4))
--- state size: (nBottleneck) x 1 x 1
+-- now: nef x 23x64x64
+netE:add(volconv(nef, nef*2, 1,4,4,  1,2,2,  0,1,1))
+netE:add(volbnorm(nef*2)):add(nn.LeakyReLU(0.2, true))
+-- now: nef*2 x 23x32x32
+netE:add(volconv(nef*2, nef*4, 3,3,3,  1,1,1,  1,1,1))
+netE:add(volbnorm(nef*4)):add(nn.LeakyReLU(0.2, true))
+-- now: nef*4 x 23x32x32
+netE:add(volconv(nef*4, nef*6,  3,4,4,  2,2,2,  0,1,1))
+netE:add(volbnorm(nef*6)):add(nn.LeakyReLU(0.2, true))
+-- now: nef*6 x 11x16x16
+netE:add(volconv(nef*6, nef*12, 3,4,4,  2,2,2,  0,1,1))
+netE:add(volbnorm(nef*12)):add(nn.LeakyReLU(0.2, true))
+-- now: nef*12 x 5x8x8
+netE:add(volconv(nef*12, nef*20, 3,4,4,  1,1,1,  0,0,0))
+-- now: nef*20 x 3x5x5
 
 local netG = nn.Sequential()
 local nz_size = nBottleneck
-if opt.noiseGen then
+if opt.noiseGen then --M should not be true.
     local netG_noise = nn.Sequential()
     -- input is Z: (nz) x 1 x 1, going into a convolution
     netG_noise:add(SpatialConvolution(nz, nz, 1, 1, 1, 1, 0, 0))
@@ -151,31 +162,31 @@ if opt.noiseGen then
     nz_size = nBottleneck+nz
 else
     netG:add(netE)
-    netG:add(SpatialBatchNormalization(nBottleneck)):add(nn.LeakyReLU(0.2, true))
+    netG:add(SpatialBatchNormalization(nef*20)):add(nn.LeakyReLU(0.2, true))
 
     nz_size = nBottleneck
 end
 
 -- Decode noise to generate image
--- input is Z: (nz_size) x 1 x 1, going into a convolution
-netG:add(SpatialFullConvolution(nz_size, ngf * 8, 4, 4))
-netG:add(SpatialBatchNormalization(ngf * 8)):add(nn.ReLU(true))
--- state size: (ngf*8) x 4 x 4
-netG:add(SpatialFullConvolution(ngf * 8, ngf * 4, 4, 4, 2, 2, 1, 1))
-netG:add(SpatialBatchNormalization(ngf * 4)):add(nn.ReLU(true))
--- state size: (ngf*4) x 8 x 8
-netG:add(SpatialFullConvolution(ngf * 4, ngf * 2, 4, 4, 2, 2, 1, 1))
-netG:add(SpatialBatchNormalization(ngf * 2)):add(nn.ReLU(true))
--- state size: (ngf*2) x 16 x 16
-netG:add(SpatialFullConvolution(ngf * 2, ngf, 4, 4, 2, 2, 1, 1))
-netG:add(SpatialBatchNormalization(ngf)):add(nn.ReLU(true))
--- state size: (ngf) x 32 x 32
-netG:add(SpatialFullConvolution(ngf, ngf, 4, 4, 2, 2, 1, 1))
-netG:add(SpatialBatchNormalization(ngf)):add(nn.ReLU(true)) --M
---M state size: (ngf) x 64 x 64
-netG:add(SpatialFullConvolution(ngf, ncout, 4, 4, 2, 2, 1, 1))
+-- now: nef*20 x 3x5x5
+netG:add(volfconv(nef*20, ngf*12, 3,4,4,  1,1,1,  0,0,0))
+netG:add(volbnorm(ngf*12):add(nn.ReLU(true)))
+-- now: ngf*16 x 5x8x8
+netG:add(volfconv(ngf*12, ngf*6,  3,4,4,  2,2,2,  0,1,1))
+netG:add(volbnorm(ngf*6)):add(nn.ReLU(true))
+-- now: ngf*6 x 11x16x16
+netG:add(volfconv(ngf*6, ngf*4,  3,3,3,  1,1,1,  1,1,1))
+netG:add(volbnorm(ngf*4)):add(nn.ReLU(true))
+-- now: ngf*4 x 23x32x32
+netG:add(volfconv(ngf*4, ngf*2,  1,4,4,  1,2,2,  0,1,1))
+netG:add(volbnorm(ngf*2)):add(nn.ReLU(true))
+-- now: ngf*2 x 23x32x32
+netG:add(volfconv(ngf*2, ngf,  1,4,4,  1,2,2,  0,1,1))
+netG:add(volbnorm(ngf)):add(nn.ReLU(true))
+-- now: ngf x 23x64x64
+netG:add(volfconv(ngf, ncout,  1,4,4,  1,2,2,  0,1,1))
 netG:add(nn.Tanh())
---M state size: (nc) x 128 x 128
+-- now: ncout x 23x128x128
 
 netG:apply(weights_init)
 -- first design a network without real implementation then NN:apply somefunctions?
@@ -185,58 +196,32 @@ netG:apply(weights_init)
 -- Adversarial discriminator net
 ---------------------------------------------------------------------------
 local netD = nn.Sequential()
-if opt.conditionAdv then -- D is also conditioned on context
-    local netD_ctx = nn.Sequential()
-    -- input Context: (nc) x 128 x 128, going into a convolution
-    netD_ctx:add(SpatialConvolution(ncout, ndf, 5, 5, 2, 2, 2, 2))
-    -- state size: (ndf) x 64 x 64
 
-    local netD_pred = nn.Sequential()
-    -- input pred: (nc) x 64 x 64, going into a convolution
-    netD_pred:add(SpatialConvolution(ncout, ndf, 5, 5, 2, 2, 2+32, 2+32))      -- 32: to keep scaling of features same as context
-    -- state size: (ndf) x 64 x 64
-
-    local netD_pl = nn.ParallelTable();
-    netD_pl:add(netD_ctx)
-    netD_pl:add(netD_pred)
-
-    netD:add(netD_pl)
-    netD:add(nn.JoinTable(2))
-    netD:add(nn.LeakyReLU(0.2, true))
-    -- state size: (ndf * 2) x 64 x 64
-
-    netD:add(SpatialConvolution(ndf*2, ndf, 4, 4, 2, 2, 1, 1))
-    netD:add(SpatialBatchNormalization(ndf)):add(nn.LeakyReLU(0.2, true))
-    -- state size: (ndf) x 32 x 32
-else
-  --M: Add a layer to make sure that the output is of size 1
-  --M: since the input is now 2x larger than the center.
-  -- state size: (nc) x 128 x 128
-  local mylayer = math.floor(ndf/2)
-  netD:add(SpatialConvolution(ncout, mylayer, 4, 4, 2, 2, 1, 1))
-  netD:add(nn.LeakyReLU(0.2, true))
-  -- state size: (ndf/2) x 64 x 64
-
-    --M input is (ndf/2) x 64 x 64, going into a convolution
-    --M netD:add(SpatialConvolution(nc, ndf, 4, 4, 2, 2, 1, 1))
-  netD:add(SpatialConvolution(mylayer, ndf, 4, 4, 2, 2, 1, 1))
-    netD:add(nn.LeakyReLU(0.2, true))
-    -- state size: (ndf) x 32 x 32
-end
-netD:add(SpatialConvolution(ndf, ndf * 2, 4, 4, 2, 2, 1, 1))
-netD:add(SpatialBatchNormalization(ndf * 2)):add(nn.LeakyReLU(0.2, true))
--- state size: (ndf*2) x 16 x 16
-netD:add(SpatialConvolution(ndf * 2, ndf * 4, 4, 4, 2, 2, 1, 1))
-netD:add(SpatialBatchNormalization(ndf * 4)):add(nn.LeakyReLU(0.2, true))
--- state size: (ndf*4) x 8 x 8
-netD:add(SpatialConvolution(ndf * 4, ndf * 8, 4, 4, 2, 2, 1, 1))
-netD:add(SpatialBatchNormalization(ndf * 8)):add(nn.LeakyReLU(0.2, true))
--- state size: (ndf*8) x 4 x 4
-netD:add(SpatialConvolution(ndf * 8, 1, 4, 4))
+-- input: ncout x 23x128x128
+netD:add(volconv(ncout, ndf, 1,4,4,  1,2,2,  0,1,1))
+netD:add(nn.LeakyReLU(0.2, true))
+-- now: nef x 23x64x64
+netD:add(volconv(ndf, ndf*2, 1,4,4,  1,2,2,  0,1,1))
+netD:add(volbnorm(ndf*2)):add(nn.LeakyReLU(0.2, true))
+-- now: nef*2 x 23x32x32
+netD:add(volconv(ndf*2, ndf*4, 3,3,3,  1,1,1,  1,1,1))
+netD:add(volbnorm(ndf*4)):add(nn.LeakyReLU(0.2, true))
+-- now: nef*4 x 23x32x32
+netD:add(volconv(ndf*4, ndf*6,  3,4,4,  2,2,2,  0,1,1))
+netD:add(volbnorm(ndf*6)):add(nn.LeakyReLU(0.2, true))
+-- now: nef*6 x 11x16x16
+netD:add(volconv(ndf*6, ndf*12, 3,4,4,  2,2,2,  0,1,1))
+netD:add(volbnorm(nef*12)):add(nn.LeakyReLU(0.2, true))
+-- now: nef*16 x 5x8x8
+netD:add(volconv(ndf*12, ndf*20, 3,4,4,  1,1,1,  0,0,0))
+netD:add(volbnorm(ndf*20)):add(nn.LeakyReLU(0.2, true)))
+-- now: nef*20 x 3x5x5
+netD:add(volconv(ndf*20, nBottleneck, 3,5,5))
 netD:add(nn.Sigmoid())
--- state size: 1 x 1 x 1
-netD:add(nn.View(1):setNumInputDims(3))
--- state size: 1
+-- now: nBottleneck x 1x1x1
+netD:add(nn.View(1):setNumInputDims(4))
+netD:add(nn.Linear(nBottleneck, 1))
+netD:add(nn.Sigmoid())
 
 netD:apply(weights_init)
 
@@ -296,12 +281,12 @@ optimStateD = {
 ---------------------------------------------------------------------------
 -- Initialize data variables
 ---------------------------------------------------------------------------
-local input_ctx_vis = torch.Tensor(opt.batchSize, ncin, opt.fineSize, opt.fineSize)
+local input_ctx_vis = torch.Tensor(opt.batchSize, ncin, opt.predLen, opt.fineSize, opt.fineSize)
 --M input_ctx_vis:view(opt.batchSize, opt.predLen, opt.nc, opt.fineSize, opt.fineSize) SHOULD
 --  give correctly arranged 2D array of RGB images
-local input_ctx = torch.Tensor(opt.batchSize, ncin, opt.fineSize, opt.fineSize) -- this is the real input, only this should be 4-channel
-local input_inpainted = torch.Tensor(opt.batchSize, ncout, opt.fineSize, opt.fineSize)
-local input_mask = torch.Tensor(opt.batchSize, ncout, opt.fineSize, opt.fineSize)
+local input_ctx = torch.Tensor(opt.batchSize, ncin, opt.predLen, opt.fineSize, opt.fineSize) -- this is the real input, only this should be 4-channel
+local input_inpainted = torch.Tensor(opt.batchSize, ncout, opt.predLen, opt.fineSize, opt.fineSize)
+local input_mask = torch.Tensor(opt.batchSize, ncout, opt.predLen, opt.fineSize, opt.fineSize)
 --M if mask has only one channel, the :maskedSelect won't work.
 
 --[[M in this case, it is not 'center', but the masked area which may be empty.
@@ -316,7 +301,7 @@ if opt.wtl2~=0 then
   end ]]--
 local input_real
 if opt.wtl2~=0 then
-  input_real = torch.Tensor(opt.batchSize, ncout, opt.fineSize, opt.fineSize)
+  input_real = torch.Tensor(opt.batchSize, ncout, opt.predLen, opt.fineSize, opt.fineSize)
 end
 
 local noise = torch.Tensor(opt.batchSize, nz, 1, 1)
@@ -429,9 +414,10 @@ local fDx = function(x)
    --M at not masked areas, input_inpainted should be gt
    
    if opt.weight_nomask == 0 then -- totally mask out the gradient of non-mask area.
-     input_inpainted:copy(real_full)
-     local maskedout = fake:maskedSelect(input_mask)
-     input_inpainted:maskedCopy(input_mask, maskedout)
+     -- input_inpainted:copy(real_full)
+     -- local maskedout = fake:maskedSelect(input_mask)
+     -- input_inpainted:maskedCopy(input_mask, maskedout)
+     input_inpainted = inpainter.fillIn(real_full, input_mask, fake)
    else 
      input_inpainted:copy(fake)
    end
@@ -589,10 +575,14 @@ for epoch = opt.loadIter+1, opt.niter do
           real_ctx = real_ctx:cuda()
           real_ctx = inpainter.fillIn(real_ctx, input_mask, fake)
 
-          disp.image(fake:view(opt.predLen*opt.batchSize, opt.ncout, fake:size(3), fake:size(4)), {win=opt.display_id, title=opt.name..'f'})
+          local mididx = math.floor(predLen/2)
+          local fake_singleim = fake[{{}, {}, {mididx}, {}, {}}]
+          local real_full_singleim = real_full[{{}, {}, {mididx}, {}, {}}]
+          local real_ctx_singleim = real_ctx[{{}, {}, {mididx}, {}, {}}]
+          disp.image(fake_singleim:view(opt.predLen*opt.batchSize, opt.ncout, fake:size(3), fake:size(4)), {win=opt.display_id, title=opt.name..'f'})
           --disp.image(input_mask:view(opt.predLen*opt.batchSize, opt.nc, fake:size(3), fake:size(4)), {win=opt.display_id * 2, title=opt.name..'m'})
-          disp.image(real_full:view(opt.predLen*opt.batchSize, opt.ncout, fake:size(3), fake:size(4)), {win=opt.display_id * 3, title=opt.name..'r'})
-          disp.image(real_ctx:view(opt.predLen*opt.batchSize, opt.ncout, fake:size(3), fake:size(4)), {win=opt.display_id * 6, title=opt.name..'i'})
+          disp.image(real_full_singleim:view(opt.predLen*opt.batchSize, opt.ncout, fake:size(3), fake:size(4)), {win=opt.display_id * 3, title=opt.name..'r'})
+          disp.image(real_ctx_singleim:view(opt.predLen*opt.batchSize, opt.ncout, fake:size(3), fake:size(4)), {win=opt.display_id * 6, title=opt.name..'i'})
       end
 
       -- logging
