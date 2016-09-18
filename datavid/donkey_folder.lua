@@ -42,6 +42,7 @@ local trainCache = paths.concat(cache, cache_prefix .. '_trainCache.t7')
 
 --------------------------------------------------------------------------------------------
 local nc = opt.nc or opt.ncout
+local ncin = opt.nc or opt.ncin
 local loadSize   = {nc, opt.loadSize}
 local sampleSize = {nc, opt.fineSize}
 
@@ -196,7 +197,7 @@ local trainHook= function(self, path, withMask)
    end
    out:mul(2):add(-1) -- make it [0, 1] -> [-1, 1]
    if withMask then
-     if nc==4 then
+     if ncin==4 then
         masked = padMask(masked, maskout)
      end
      masked:mul(2):add(-1)
