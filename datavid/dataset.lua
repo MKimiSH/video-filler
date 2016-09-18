@@ -424,6 +424,7 @@ function dataset:sample(quantity, length)
    local data, scalarLabels = tableToOutput(self, dataTable, scalarTable)
    local mask = tableToOutput(self, maskTable, scalarTable)
    local masked = tableToOutput(self, maskedTable, scalarTable)
+   -- print(masked:size())
    return masked, data, mask:byte(), scalarLabels -- to fit the input order...
   --[[M for i=1,quantity do
     local class = torch.random(1, #self.classes)

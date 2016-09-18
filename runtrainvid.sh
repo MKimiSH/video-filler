@@ -58,4 +58,7 @@
 # DATA_ROOT=dataset/train nBottleneck=5000 name=testgt1_ldsz240 loadSize=240 gpu=3 nThreads=4 predLen=1 batchSize=64 display_port=8002 weight_nomask=1 loadName=0907/testgt1_ldsz200 loadIter=60 th train_vid_weighted.lua
 
 ### 0912 ###
-DATA_ROOT=dataset/train nBottleneck=5000 name=test_0912 loadSize=240 gpu=3 nThreads=4 predLen=1 batchSize=64 display_port=8002 weight_nomask=0.5 th train_vid_weighted.lua
+# DATA_ROOT=dataset/train nBottleneck=5000 name=test_0912 loadSize=240 gpu=3 nThreads=4 predLen=1 batchSize=64 display_port=8002 weight_nomask=0.5 th train_vid_weighted.lua
+
+### 0918 ### 4 channel input
+ntrain=36000 DATA_ROOT=dataset/train nBottleneck=5000 name=test_0918 loadSize=180 gpu=3 nThreads=4 predLen=1 batchSize=64 display_port=8002 weight_nomask=1 th train_4channel.lua

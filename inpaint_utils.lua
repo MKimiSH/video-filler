@@ -100,4 +100,41 @@ function inpaint_utils.fillIn(dst, mask, src, wScale)
   return dst
 end
 
+local function removePadMask3D(dst, ncin, ncout)
+  --print(dst:size())
+  assert(dst:size(1)%ncin == 0, "ndims not matching")
+  
+  local sizes = torch.LongStorage({dst:size(1)*ncout/ncin, dst:size(2), dst:size(3)})
+  local out = torch.Tensor(sizes)
+  --print(out:size())
+  for i=1, dst:size(1), ncin do
+    local outi = (i-1)*ncout/ncin + 1
+    --print(outi)
+    out[{{outi, outi+ncout-1}, {}, {}}] = dst[{{i, i+ncout-1}, {}, {}}]:clone()
+  end
+  return out
+end
+
+-- change dst from ncin to ncout channels
+-- first dim must be channels!!!
+function inpaint_utils.removePadMask(dst, ncin, ncout)
+  --print(dst:size())
+  assert(dst:dim()==3 or dst:dim()==4, "first dim must be channels or batchSize!")
+  -- assert(dst:size(1)%ncin == 0, "ndims not matching")
+  if dst:dim()==3 then 
+    return removePadMask3D(dst, ncin, ncout)
+  else
+    local sizes = dst:size()
+    sizes[2] = sizes[2]*ncout/ncin
+    local out = torch.Tensor(sizes)
+    for i=1,sizes[1] do
+      local outi = removePadMask3D(dst[i], ncin, ncout)
+      out[i] = outi:clone()
+    end
+    return out
+  end
+  --return out
+end
+
+
 return inpaint_utils

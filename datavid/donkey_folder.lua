@@ -131,12 +131,12 @@ end
 
 local function padMask(im, mask)
    assert(im:dim() == mask:dim()) -- only 3 dimensions allowed
-   assert(im:size(1) == mask:size(1)*3) -- im im im mask im im im mask
-   local out = torch.Tensor(im:size(1)+mask:size(1), im:size(2), im:size(3))
+   assert(im:size(1) == mask:size(1), im:size(1)..mask:size(1)) -- im im im mask im im im mask
+   local out = torch.Tensor(im:size(1)*ncin/nc, im:size(2), im:size(3))
    local cntim = 1
    for i=1,out:size(1) do
       if i%4==0 then
-         out[i] = mask[i/4]:float()
+         out[i] = mask[i/4*3]:float()
       else
          out[i] = im[cntim]:clone()
          cntim = cntim + 1;

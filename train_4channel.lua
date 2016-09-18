@@ -187,12 +187,12 @@ local netD = nn.Sequential()
 if opt.conditionAdv then -- D is also conditioned on context
     local netD_ctx = nn.Sequential()
     -- input Context: (nc) x 128 x 128, going into a convolution
-    netD_ctx:add(SpatialConvolution(ncin, ndf, 5, 5, 2, 2, 2, 2))
+    netD_ctx:add(SpatialConvolution(ncout, ndf, 5, 5, 2, 2, 2, 2))
     -- state size: (ndf) x 64 x 64
 
     local netD_pred = nn.Sequential()
     -- input pred: (nc) x 64 x 64, going into a convolution
-    netD_pred:add(SpatialConvolution(ncin, ndf, 5, 5, 2, 2, 2+32, 2+32))      -- 32: to keep scaling of features same as context
+    netD_pred:add(SpatialConvolution(ncout, ndf, 5, 5, 2, 2, 2+32, 2+32))      -- 32: to keep scaling of features same as context
     -- state size: (ndf) x 64 x 64
 
     local netD_pl = nn.ParallelTable();
@@ -212,7 +212,7 @@ else
   --M: since the input is now 2x larger than the center.
   -- state size: (nc) x 128 x 128
   local mylayer = math.floor(ndf/2)
-  netD:add(SpatialConvolution(ncin, mylayer, 4, 4, 2, 2, 1, 1))
+  netD:add(SpatialConvolution(ncout, mylayer, 4, 4, 2, 2, 1, 1))
   netD:add(nn.LeakyReLU(0.2, true))
   -- state size: (ndf/2) x 64 x 64
 
@@ -295,7 +295,7 @@ optimStateD = {
 ---------------------------------------------------------------------------
 -- Initialize data variables
 ---------------------------------------------------------------------------
-local input_ctx_vis = torch.Tensor(opt.batchSize, ncout, opt.fineSize, opt.fineSize)
+local input_ctx_vis = torch.Tensor(opt.batchSize, ncin, opt.fineSize, opt.fineSize)
 --M input_ctx_vis:view(opt.batchSize, opt.predLen, opt.nc, opt.fineSize, opt.fineSize) SHOULD
 --  give correctly arranged 2D array of RGB images
 local input_ctx = torch.Tensor(opt.batchSize, ncin, opt.fineSize, opt.fineSize) -- this is the real input, only this should be 4-channel
@@ -576,12 +576,17 @@ for epoch = opt.loadIter+1, opt.niter do
           --M: Now *fake* is the generated image, so no need to show the CTX with the CENTER.
           --M: but show it with mask.
 
-          local maskedout = fake:maskedSelect(input_mask)
-          print(maskedout:min(), maskedout:max())
-          print(real_ctx:min(), real_ctx:max())
-          print(real_full:min(), real_full:max())
+          -- local maskedout = fake:maskedSelect(input_mask)
+          -- print(maskedout:min(), maskedout:max())
+          -- print(real_ctx:min(), real_ctx:max())
+          -- print(real_full:min(), real_full:max())
+          -- real_ctx = real_ctx:cuda()
+          -- real_ctx:maskedCopy(input_mask, maskedout)
+          if ncin==4 then 
+            real_ctx = inpainter.removePadMask(real_ctx, ncin, ncout)
+          end
           real_ctx = real_ctx:cuda()
-          real_ctx:maskedCopy(input_mask, maskedout)
+          real_ctx = inpainter.fillIn(real_ctx, input_mask, fake)
 
           disp.image(fake:view(opt.predLen*opt.batchSize, opt.ncout, fake:size(3), fake:size(4)), {win=opt.display_id, title=opt.name..'f'})
           --disp.image(input_mask:view(opt.predLen*opt.batchSize, opt.nc, fake:size(3), fake:size(4)), {win=opt.display_id * 2, title=opt.name..'m'})
