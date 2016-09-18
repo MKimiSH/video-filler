@@ -128,6 +128,22 @@ local function randomBlockMask(im)
   return im:clone(), maskout
 end
 
+local function padMask(im, mask)
+   assert(im:dim() == mask:dim()) -- only 3 dimensions allowed
+   assert(im:size(1) == mask:size(1)*3) -- im im im mask im im im mask
+   local out = torch.Tensor(im:size(1)+mask:size(1), im:size(2), im:size(3))
+   local cntim = 1
+   for i=1,out:size(1) do
+      if i%4==0 then
+         out[i] = mask[i/4]:float()
+      else
+         out[i] = im[cntim]:clone()
+         cntim = cntim + 1;
+      end
+   end
+   return out
+end
+
 -- channel-wise mean and std. Calculate or load  them from disk later in the script.
 local mean,std
 --------------------------------------------------------------------------------
@@ -180,6 +196,9 @@ local trainHook= function(self, path, withMask)
    end
    out:mul(2):add(-1) -- make it [0, 1] -> [-1, 1]
    if withMask then
+     if nc==4 then
+        masked = padMask(masked, maskout)
+     end
      masked:mul(2):add(-1)
      return out, maskout, masked
    end

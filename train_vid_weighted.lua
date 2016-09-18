@@ -21,7 +21,7 @@ opt = {
    nef = 64,               -- #  of encoder filters in first conv layer
    ngf = 64,               -- #  of gen filters in first conv layer
    ndf = 64,               -- #  of discrim filters in first conv layer
-   nc = 3,                 -- # of channels in input
+   nc = 3,                 -- # of channels in input, nc=4<->3ch image + 1ch mask
    predLen = 4,            --M # of frames in a clip
    wtl2 = 0.999,           -- 0 means don't use else use with this weight --M this weight is necessary
    weight_nomask = 0.05,   --M non-mask region weight

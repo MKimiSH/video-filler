@@ -337,6 +337,7 @@ end
 --M class refers to a video, and quantity to the predLen
 --M The function reads from the folder/video to get quantity images and
   returns a tensor.
+  Not Used
 ]]--
 function dataset:getVid(class, quantity)
   -- actually I don't need either class or quantity
