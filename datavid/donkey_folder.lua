@@ -41,7 +41,7 @@ os.execute('mkdir -p cache')
 local trainCache = paths.concat(cache, cache_prefix .. '_trainCache.t7')
 
 --------------------------------------------------------------------------------------------
-local nc = opt.nc
+local nc = opt.nc or opt.ncout
 local loadSize   = {nc, opt.loadSize}
 local sampleSize = {nc, opt.fineSize}
 
