@@ -1,0 +1,7 @@
+# ignore!
+cache/*
+
+dataset
+dataset/*
+
+training_logs
