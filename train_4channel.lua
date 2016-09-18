@@ -172,7 +172,7 @@ netG:add(SpatialBatchNormalization(ngf)):add(nn.ReLU(true))
 netG:add(SpatialFullConvolution(ngf, ngf, 4, 4, 2, 2, 1, 1))
 netG:add(SpatialBatchNormalization(ngf)):add(nn.ReLU(true)) --M
 --M state size: (ngf) x 64 x 64
-netG:add(SpatialFullConvolution(ngf, nc, 4, 4, 2, 2, 1, 1))
+netG:add(SpatialFullConvolution(ngf, ncout, 4, 4, 2, 2, 1, 1))
 netG:add(nn.Tanh())
 --M state size: (nc) x 128 x 128
 
@@ -187,12 +187,12 @@ local netD = nn.Sequential()
 if opt.conditionAdv then -- D is also conditioned on context
     local netD_ctx = nn.Sequential()
     -- input Context: (nc) x 128 x 128, going into a convolution
-    netD_ctx:add(SpatialConvolution(nc, ndf, 5, 5, 2, 2, 2, 2))
+    netD_ctx:add(SpatialConvolution(ncin, ndf, 5, 5, 2, 2, 2, 2))
     -- state size: (ndf) x 64 x 64
 
     local netD_pred = nn.Sequential()
     -- input pred: (nc) x 64 x 64, going into a convolution
-    netD_pred:add(SpatialConvolution(nc, ndf, 5, 5, 2, 2, 2+32, 2+32))      -- 32: to keep scaling of features same as context
+    netD_pred:add(SpatialConvolution(ncin, ndf, 5, 5, 2, 2, 2+32, 2+32))      -- 32: to keep scaling of features same as context
     -- state size: (ndf) x 64 x 64
 
     local netD_pl = nn.ParallelTable();
@@ -212,7 +212,7 @@ else
   --M: since the input is now 2x larger than the center.
   -- state size: (nc) x 128 x 128
   local mylayer = math.floor(ndf/2)
-  netD:add(SpatialConvolution(nc, mylayer, 4, 4, 2, 2, 1, 1))
+  netD:add(SpatialConvolution(ncin, mylayer, 4, 4, 2, 2, 1, 1))
   netD:add(nn.LeakyReLU(0.2, true))
   -- state size: (ndf/2) x 64 x 64
 
@@ -295,12 +295,12 @@ optimStateD = {
 ---------------------------------------------------------------------------
 -- Initialize data variables
 ---------------------------------------------------------------------------
-local input_ctx_vis = torch.Tensor(opt.batchSize, nc, opt.fineSize, opt.fineSize)
+local input_ctx_vis = torch.Tensor(opt.batchSize, ncout, opt.fineSize, opt.fineSize)
 --M input_ctx_vis:view(opt.batchSize, opt.predLen, opt.nc, opt.fineSize, opt.fineSize) SHOULD
 --  give correctly arranged 2D array of RGB images
-local input_ctx = torch.Tensor(opt.batchSize, nc, opt.fineSize, opt.fineSize)
-local input_inpainted = torch.Tensor(opt.batchSize, nc, opt.fineSize, opt.fineSize)
-local input_mask = torch.Tensor(opt.batchSize, nc, opt.fineSize, opt.fineSize)
+local input_ctx = torch.Tensor(opt.batchSize, ncin, opt.fineSize, opt.fineSize) -- this is the real input, only this should be 4-channel
+local input_inpainted = torch.Tensor(opt.batchSize, ncout, opt.fineSize, opt.fineSize)
+local input_mask = torch.Tensor(opt.batchSize, ncout, opt.fineSize, opt.fineSize)
 --M if mask has only one channel, the :maskedSelect won't work.
 
 --[[M in this case, it is not 'center', but the masked area which may be empty.
@@ -315,7 +315,7 @@ if opt.wtl2~=0 then
   end ]]--
 local input_real
 if opt.wtl2~=0 then
-  input_real = torch.Tensor(opt.batchSize, nc, opt.fineSize, opt.fineSize)
+  input_real = torch.Tensor(opt.batchSize, ncout, opt.fineSize, opt.fineSize)
 end
 
 local noise = torch.Tensor(opt.batchSize, nz, 1, 1)
@@ -583,10 +583,10 @@ for epoch = opt.loadIter+1, opt.niter do
           real_ctx = real_ctx:cuda()
           real_ctx:maskedCopy(input_mask, maskedout)
 
-          disp.image(fake:view(opt.predLen*opt.batchSize, opt.nc, fake:size(3), fake:size(4)), {win=opt.display_id, title=opt.name..'f'})
+          disp.image(fake:view(opt.predLen*opt.batchSize, opt.ncout, fake:size(3), fake:size(4)), {win=opt.display_id, title=opt.name..'f'})
           --disp.image(input_mask:view(opt.predLen*opt.batchSize, opt.nc, fake:size(3), fake:size(4)), {win=opt.display_id * 2, title=opt.name..'m'})
-          disp.image(real_full:view(opt.predLen*opt.batchSize, opt.nc, fake:size(3), fake:size(4)), {win=opt.display_id * 3, title=opt.name..'r'})
-          disp.image(real_ctx:view(opt.predLen*opt.batchSize, opt.nc, fake:size(3), fake:size(4)), {win=opt.display_id * 6, title=opt.name..'i'})
+          disp.image(real_full:view(opt.predLen*opt.batchSize, opt.ncout, fake:size(3), fake:size(4)), {win=opt.display_id * 3, title=opt.name..'r'})
+          disp.image(real_ctx:view(opt.predLen*opt.batchSize, opt.ncout, fake:size(3), fake:size(4)), {win=opt.display_id * 6, title=opt.name..'i'})
       end
 
       -- logging
